@@ -22,7 +22,7 @@ namespace XgAnalysisJsonYielderNamespace
             Stopwatch stopwatch = Stopwatch.StartNew();
             int matchCount = JsonFromXgAnalysisHtml(@"C:\Users\halhe\Documents\eXtremeGammon\Exports Web\uploadComplete");
             stopwatch.Stop();
-            Debug.Assert(matchCount > 0);
+            Debug.Assert(matchCount >= 17892);
             double elapsedMinutes = stopwatch.Elapsed.TotalMinutes;
             Debug.WriteLine($"TestUploadComplete completed {matchCount} matches in {elapsedMinutes:F2} minutes");
         }
@@ -31,7 +31,6 @@ namespace XgAnalysisJsonYielderNamespace
             int matchCount = 0;
             foreach (MatchAnalysis xgMatchAnalysis in XgAnalysisJsonYielder.XgAnalysisMatchJsonYielder(XgHtmlAnalysisDirectory))
             {
-                Debug.Assert(true);
                 ++matchCount;
             }
             return matchCount;

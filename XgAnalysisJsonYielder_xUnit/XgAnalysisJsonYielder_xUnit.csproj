@@ -15,7 +15,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\XgAnalysisJson\XgAnalysisJson\XgAnalysisJson.csproj" />
     <ProjectReference Include="..\XgAnalysisJsonYielder\XgAnalysisJsonYielder.csproj" />
   </ItemGroup>
 
