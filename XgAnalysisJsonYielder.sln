@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XgAnalysisJsonYielder_xUnit
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XgAnalysisJson", "XgAnalysisJson\XgAnalysisJson.csproj", "{4C7B206D-6ECA-4385-9045-6E38A8D157FB}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Xgid", "..\Xgid\Xgid\Xgid.csproj", "{4F7E8891-1A95-481B-985E-2235DE00F242}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,10 @@ Global
 		{4C7B206D-6ECA-4385-9045-6E38A8D157FB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4C7B206D-6ECA-4385-9045-6E38A8D157FB}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4C7B206D-6ECA-4385-9045-6E38A8D157FB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4F7E8891-1A95-481B-985E-2235DE00F242}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4F7E8891-1A95-481B-985E-2235DE00F242}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4F7E8891-1A95-481B-985E-2235DE00F242}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4F7E8891-1A95-481B-985E-2235DE00F242}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

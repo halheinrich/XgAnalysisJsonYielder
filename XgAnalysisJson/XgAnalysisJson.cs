@@ -14,6 +14,7 @@
         public int BottomPlayerNeeds { get; set; }
         public int TopPlayerNeeds { get; set; }
         public bool IsCrawford { get; set; }
+        public bool IsFromBeginning { get; set; } = false;
         public List<CubeAnalysis> CubeAnalysisList { get; set; } = [];
         public List<CheckerPlayAnalysis> CheckerPlayAnalysisList { get; set; } = [];
     }
@@ -23,7 +24,8 @@
         public int MoveNumber { get; set; }
         public float NoDoubleEquity { get; set; }
         public float DoubleTakeEquity { get; set; }
-        public float WrongPassThreshold { get; set; }
+        public float WrongPassThreshold { get; set; } = 0.0f;
+        public float WrongTakeThreshold { get; set; } = 0.0f;
         public string AnalysisDepth { get; set; } = string.Empty;
     }
     public class CheckerPlayAnalysis
