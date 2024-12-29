@@ -126,7 +126,6 @@ namespace XgAnalysisJsonYielderNamespace
                     xgGameHtmSorted[gameNumber - 1] = xgGameHtm;
                 else
                     throw new InvalidOperationException($"Invalid game number in file name: {xgGameHtm.Name}");
-                xgGameHtmSorted[gameNumber - 1] = xgGameHtm;
             }
             int endIndex = -1;
             for (int i = 0; i < xgGameHtmSorted.Length; i++)
@@ -255,17 +254,6 @@ namespace XgAnalysisJsonYielderNamespace
             {
                 ExtractCheckerPlayAnalysis(_XgGameText, _XgGameJson, xgid, moveNumber);
             }
-            //_StartIndex = ExtractXgId(_XgGameText, xgCubeAnalysis, _StartIndex, xgIdToken);
-            //_StartIndex = ExtractMoveNumber(_XgGameText, xgCubeAnalysis, _StartIndex);
-            //_StartIndex = ExtractNoDoubleEquity(_XgGameText, xgCubeAnalysis, _StartIndex);
-            //_StartIndex = ExtractDoubleTakeEquity(_XgGameText, xgCubeAnalysis, _StartIndex);
-            //_StartIndex = ExtractWrongPassThreshold(_XgGameText, xgCubeAnalysis, _StartIndex);
-            //_StartIndex = ExtractAnalysisDepth(_XgGameText, xgCubeAnalysis, _StartIndex);
-            //_XgGameJson.CubeAnalysisList.Add(xgCubeAnalysis);
-            //const string crawfordToken = " Crawford<";
-            //int crawfordIndex = _XgGameText.IndexOf(crawfordToken, _StartIndex, StringComparison.Ordinal);
-            //_XgGameJson.IsCrawford = crawfordIndex != -1;
-            //return crawfordIndex == -1 ? _StartIndex : crawfordIndex + crawfordToken.Length;
         }
         private static void ExtractCubeAnalysis(string _XgGameText, GameAnalysis _XgGameJson, Xgid _Xgid, int _MoveNumber)
         {
@@ -273,10 +261,13 @@ namespace XgAnalysisJsonYielderNamespace
             CubeAnalysis cubeAnalysis = new();
             cubeAnalysis.MoveNumber = _MoveNumber;
             cubeAnalysis.XgidTxt = _Xgid.XgidText;
-            int endIndex = ExtractAnalysisDepth(_XgGameText, cubeAnalysis, cubeAnalysis.XgidTxt.Length);
-            endIndex = ExtractNoDoubleEquity(_XgGameText, cubeAnalysis, cubeAnalysis.XgidTxt.Length);
-            endIndex = ExtractDoubleTakeEquity(_XgGameText, cubeAnalysis, cubeAnalysis.XgidTxt.Length);
-            endIndex = ExtractWrongPassThreshold(_XgGameText, cubeAnalysis, cubeAnalysis.XgidTxt.Length);
+            int analysisDepthEndIndex = ExtractAnalysisDepth(_XgGameText, cubeAnalysis, cubeAnalysis.XgidTxt.Length);
+            int noDblEndIndex = ExtractNoDoubleEquity(_XgGameText, cubeAnalysis, analysisDepthEndIndex);
+            int dblTakeEndIndex = ExtractDoubleTakeEquity(_XgGameText, cubeAnalysis, noDblEndIndex);
+            int endIndex = ExtractOccuredCubeAction(_XgGameText, cubeAnalysis, noDblEndIndex, dblTakeEndIndex, analysisDepthEndIndex);
+            endIndex = ExtractWrongPassThreshold(_XgGameText, cubeAnalysis, dblTakeEndIndex);
+            if (cubeAnalysis.AnalysisDepth.Equals("Rollout"))
+                endIndex = ExtractRolloutDetails(_XgGameText, cubeAnalysis, endIndex);
             _XgGameJson.CubeAnalysisList.Add(cubeAnalysis);
         }
         private static void ExtractCheckerPlayAnalysis(string _XgGameText, GameAnalysis _XgGameJson, Xgid _Xgid, int _MoveNumber)
@@ -296,8 +287,6 @@ namespace XgAnalysisJsonYielderNamespace
             int analysisDepthEndIndex = _XgGameText.IndexOf(analysisDepthEndToken, analysisDepthStartIndex);
             Debug.Assert(analysisDepthEndIndex != -1, "AnalysisDepth error");
             _CubeAnalysis.AnalysisDepth = _XgGameText.Substring(analysisDepthStartIndex, analysisDepthEndIndex - analysisDepthStartIndex);
-            if (_CubeAnalysis.AnalysisDepth.Equals("Rollout"))
-                Debug.Assert(true);
             return analysisDepthEndIndex + analysisDepthEndToken.Length;
         }
         private static int ExtractNoDoubleEquity(string _XgGameText, CubeAnalysis _CubeAnalysis, int _StartIndex)
@@ -379,7 +368,6 @@ namespace XgAnalysisJsonYielderNamespace
                 _CubeAnalysis.WrongPassThreshold = WrongPassThreshold;
                 return WrongPassThresholdEndIndex + 1;
             }
-
             const string WrongTakeThresholdStartToken = "take needed to make the double decision right: ";
             int WrongTakeThresholdStartIndex = _XgGameText.IndexOf(WrongTakeThresholdStartToken, percentageWrongStartIndex);
             if (WrongTakeThresholdStartIndex != -1)
@@ -396,7 +384,152 @@ namespace XgAnalysisJsonYielderNamespace
             Debug.Assert(false, "WrongTakeThreshold error");
             return -1;
         }
+        private static int ExtractOccuredCubeAction(string _XgGameText, CubeAnalysis _CubeAnalysis, int _NoDblEndIndex, int _DblTakeEndIndex, int _StartIndex)
+        {
+            const string playedToken = "alt=\"played\"";
+            int playedIndex = _XgGameText.IndexOf(playedToken, _StartIndex);
+            if (playedIndex == -1)
+            {
+                if (_XgGameText.IndexOf(">Resigns the match<", _StartIndex) == -1
+                    && _XgGameText.IndexOf(">Resigns a Single Game ", _StartIndex) == -1)
+                {
+                    throw new InvalidOperationException($"Cube action played");
+                }
+                else
+                {
+                    _CubeAnalysis.DidPlayerDouble = false;
+                    _CubeAnalysis.DidPlayerTake = false;
+                }
+                return _StartIndex;
+            }
+            if (playedIndex < _NoDblEndIndex)
+            {
+                _CubeAnalysis.DidPlayerDouble = false;
+                _CubeAnalysis.DidPlayerTake = false;
+            }
+            else
+            {
+                if (playedIndex < _DblTakeEndIndex)
+                {
+                    _CubeAnalysis.DidPlayerDouble = true;
+                    _CubeAnalysis.DidPlayerTake = true;
+                }
+                else
+                {
+                    _CubeAnalysis.DidPlayerDouble = true;
+                    _CubeAnalysis.DidPlayerTake = false;
+                }
+            }
+            return _DblTakeEndIndex;
+        }
+        private static int ExtractRolloutDetails(string _XgGameText, CubeAnalysis _CubeAnalysis, int _StartIndex)
+        {
+            const string rolloutDetailsToken = ">Rollout details</td></tr>";
+            int rolloutDetailsStartIndex = _XgGameText.IndexOf(rolloutDetailsToken, _StartIndex);
+            Debug.Assert(rolloutDetailsStartIndex != -1, rolloutDetailsToken);
+            rolloutDetailsStartIndex += rolloutDetailsToken.Length;
+
+            // trials
+            const string gamesRolledToken = " Games rolled";
+            int gamesRolledEndIndex = _XgGameText.IndexOf(gamesRolledToken, rolloutDetailsStartIndex);
+            Debug.Assert(gamesRolledEndIndex != -1, rolloutDetailsToken);
+            int gamesRolledStartIndex = _XgGameText.LastIndexOf('>', gamesRolledEndIndex);
+            Debug.Assert(gamesRolledStartIndex != -1, rolloutDetailsToken);
+            ++gamesRolledStartIndex;
+            string trialsTxt = _XgGameText.Substring(gamesRolledStartIndex, gamesRolledEndIndex - gamesRolledStartIndex);
+            if (!int.TryParse(trialsTxt, out int rolloutTrials))
+                throw new InvalidOperationException($"Invalid trials: {trialsTxt}");
+
+            // Dice Seed
+            long? diceSeed = null;
+            const string diceSeedDepthToken = ">Dice Seed: ";
+            int diceSeedEndIndex = gamesRolledEndIndex;
+            int diceSeedStartIndex = _XgGameText.IndexOf(diceSeedDepthToken, diceSeedEndIndex);
+            if (diceSeedStartIndex == -1)
+            {
+                diceSeedStartIndex = gamesRolledEndIndex;
+            }
+            else
+            {
+                diceSeedStartIndex += diceSeedDepthToken.Length;
+                diceSeedEndIndex = _XgGameText.IndexOf('<', diceSeedStartIndex);
+                Debug.Assert(diceSeedEndIndex != -1, diceSeedDepthToken);
+                string diceSeedTxt = _XgGameText.Substring(diceSeedStartIndex, diceSeedEndIndex - diceSeedStartIndex);
+                if (!long.TryParse(diceSeedTxt, out long seed))
+                    throw new InvalidOperationException($"Invalid dice seed: {diceSeedTxt}");
+                diceSeed = seed;
+            }
+
+            // Analysis depth
+            const string analysisDepthToken = ">Moves and cube decisions: ";
+            int analysisDepthStartIndex = _XgGameText.IndexOf(analysisDepthToken, diceSeedEndIndex);
+            if (analysisDepthStartIndex == -1)
+            {
+                const string cubeAnalysisDepthToken = "cube decisions: ";
+                analysisDepthStartIndex = _XgGameText.IndexOf(cubeAnalysisDepthToken, diceSeedStartIndex);
+                Debug.Assert(analysisDepthStartIndex != -1, analysisDepthToken);
+                analysisDepthStartIndex += cubeAnalysisDepthToken.Length;
+            }
+            else
+            {
+                analysisDepthStartIndex += analysisDepthToken.Length;
+            }
+            int analysisDepthEndIndex = _XgGameText.IndexOf('<', analysisDepthStartIndex);
+            Debug.Assert(analysisDepthEndIndex != -1, analysisDepthToken);
+            string analysisDepth = _XgGameText.Substring(analysisDepthStartIndex, analysisDepthEndIndex - analysisDepthStartIndex);
+
+            // Double Confidence
+            float? doubleConfidence = null;
+            const string doubleConfidenceToken = ">Double Decision confidence:</td>";
+            int doubleConfidenceEndIndex = analysisDepthEndIndex;
+            int doubleConfidenceStartIndex = _XgGameText.IndexOf(doubleConfidenceToken, analysisDepthEndIndex);
+            if (doubleConfidenceStartIndex != -1)
+            {
+                doubleConfidenceStartIndex += doubleConfidenceToken.Length;
+                doubleConfidenceStartIndex = _XgGameText.IndexOf("<td>", doubleConfidenceStartIndex);
+                Debug.Assert(analysisDepthStartIndex != -1, doubleConfidenceToken);
+                doubleConfidenceStartIndex += 4;
+                doubleConfidenceEndIndex = _XgGameText.IndexOf('%', doubleConfidenceStartIndex);
+                Debug.Assert(doubleConfidenceEndIndex != -1, doubleConfidenceToken);
+                string doubleConfidenceTxt = _XgGameText.Substring(doubleConfidenceStartIndex, doubleConfidenceEndIndex - doubleConfidenceStartIndex);
+                if (!float.TryParse(doubleConfidenceTxt, out float confidence))
+                    throw new InvalidOperationException($"Invalid Double Confidence: {doubleConfidenceTxt}");
+                doubleConfidence = confidence /= (float)100.0;
+            }
+
+            // Take Confidence
+            float? takeConfidence = null;
+            const string takeConfidenceToken = ">Take Decision confidence:</td>";
+            int takeConfidenceEndIndex = doubleConfidenceEndIndex;
+            int takeConfidenceStartIndex = _XgGameText.IndexOf(takeConfidenceToken, doubleConfidenceEndIndex);
+            if (takeConfidenceStartIndex == -1)
+            {
+                takeConfidenceStartIndex = analysisDepthEndIndex;
+            }
+            else
+            {
+                takeConfidenceStartIndex += takeConfidenceToken.Length;
+                takeConfidenceStartIndex = _XgGameText.IndexOf("<td>", takeConfidenceStartIndex);
+                Debug.Assert(analysisDepthStartIndex != -1, takeConfidenceToken);
+                takeConfidenceStartIndex += 4;
+                takeConfidenceEndIndex = _XgGameText.IndexOf('%', takeConfidenceStartIndex);
+                Debug.Assert(takeConfidenceEndIndex != -1, takeConfidenceToken);
+                string takeConfidenceTxt = _XgGameText.Substring(takeConfidenceStartIndex, takeConfidenceEndIndex - takeConfidenceStartIndex);
+                if (!float.TryParse(takeConfidenceTxt, out float confidence))
+                    throw new InvalidOperationException($"Invalid Take Confidence: {takeConfidenceTxt}");
+                takeConfidence = confidence /= (float)100.0;
+            }
+
+            RolloutDetails rolloutDetails = new();
+            rolloutDetails.Trials = rolloutTrials;
+            rolloutDetails.DiceSeed = diceSeed;
+            rolloutDetails.AnalysisDepth = analysisDepth;
+            rolloutDetails.DoubleDecisionConfidence = doubleConfidence;
+            rolloutDetails.TakeDecisionConfidence = takeConfidence;
+            _CubeAnalysis.RolloutDetails = rolloutDetails;
+
+            return takeConfidenceEndIndex;
+        }
         #endregion Decision helper methods
     }
 }
-

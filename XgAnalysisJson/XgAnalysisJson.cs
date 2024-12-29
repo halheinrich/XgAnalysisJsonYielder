@@ -27,6 +27,9 @@
         public float WrongPassThreshold { get; set; } = 0.0f;
         public float WrongTakeThreshold { get; set; } = 0.0f;
         public string AnalysisDepth { get; set; } = string.Empty;
+        public bool DidPlayerDouble { get; set; }
+        public bool DidPlayerTake { get; set; }
+        public RolloutDetails? RolloutDetails { get; set; } = null;
     }
     public class CheckerPlayAnalysis
     {
@@ -39,5 +42,13 @@
         public string MoveTxt { get; set; } = string.Empty;
         public string AnalysisDepth { get; set; } = string.Empty;
         public float CheckerPlayEquity { get; set; }
+    }
+    public class RolloutDetails
+    {
+        public int Trials { get; set; }
+        public string AnalysisDepth { get; set; } = string.Empty;
+        public long? DiceSeed { get; set; } = null;
+        public float? DoubleDecisionConfidence { get; set; } = null;
+        public float? TakeDecisionConfidence { get; set; } = null;
     }
 }
