@@ -217,8 +217,6 @@ namespace XgAnalysisJsonYielderNamespace
             _XgGameJson.IsCrawford = crawfordIndex != -1;
             return crawfordIndex == -1 ? _StartIndex : crawfordIndex + crawfordToken.Length;
         }
-        #endregion Game helper methods
-        #region Decision helper methods
         private static void LoadXgAnalysisDecisionsJson(string _XgGameText, GameAnalysis _XgGameJson, int _StartIndex)
         {
             const string xgIdToken = ">XGID=";
@@ -255,6 +253,8 @@ namespace XgAnalysisJsonYielderNamespace
                 ExtractCheckerPlayAnalysis(_XgGameText, _XgGameJson, xgid, moveNumber);
             }
         }
+        #endregion Game helper methods
+        #region Cube Decision helper methods
         private static void ExtractCubeAnalysis(string _XgGameText, GameAnalysis _XgGameJson, Xgid _Xgid, int _MoveNumber)
         {
             Debug.Assert(_Xgid.XgidText != null);
@@ -269,14 +269,6 @@ namespace XgAnalysisJsonYielderNamespace
             if (cubeAnalysis.AnalysisDepth.Equals("Rollout"))
                 endIndex = ExtractRolloutDetails(_XgGameText, cubeAnalysis, endIndex);
             _XgGameJson.CubeAnalysisList.Add(cubeAnalysis);
-        }
-        private static void ExtractCheckerPlayAnalysis(string _XgGameText, GameAnalysis _XgGameJson, Xgid _Xgid, int _MoveNumber)
-        {
-            Debug.Assert(_Xgid.XgidText != null);
-            CheckerPlayAnalysis checkerPlayAnalysis = new();
-            checkerPlayAnalysis.MoveNumber = _MoveNumber;
-            checkerPlayAnalysis.XgidTxt = _Xgid.XgidText;
-            _XgGameJson.CheckerPlayAnalysisList.Add(checkerPlayAnalysis);
         }
         private static int ExtractAnalysisDepth(string _XgGameText, CubeAnalysis _CubeAnalysis, int _StartIndex)
         {
@@ -530,6 +522,186 @@ namespace XgAnalysisJsonYielderNamespace
 
             return takeConfidenceEndIndex;
         }
-        #endregion Decision helper methods
+        #endregion Cube Decision helper methods
+        #region Checker Play Decision helper methods
+        private static void ExtractCheckerPlayAnalysis(string _XgGameText, GameAnalysis _XgGameJson, Xgid _Xgid, int _MoveNumber)
+        {
+            Debug.Assert(_Xgid.XgidText != null);
+            CheckerPlayAnalysis checkerPlayAnalysis = new();
+            checkerPlayAnalysis.MoveNumber = _MoveNumber;
+            checkerPlayAnalysis.XgidTxt = _Xgid.XgidText;
+            int endIndex = checkerPlayAnalysis.XgidTxt.Length;
+            bool isAnyRollouts = false;
+            while (true)
+            {
+                endIndex = ExtractCheckerPlayVariationAnalysis(_XgGameText, checkerPlayAnalysis, endIndex, out bool isNoMore, ref isAnyRollouts);
+                if (isNoMore)
+                    break;
+            }
+            _XgGameJson.CheckerPlayAnalysisList.Add(checkerPlayAnalysis);
+            while (isAnyRollouts)
+            {
+                endIndex = ExtractCheckerPlayRolloutDetails(_XgGameText, checkerPlayAnalysis, endIndex, out bool isNoMore);
+                if (isNoMore)
+                    break;
+            }
+        }
+        private static int ExtractCheckerPlayVariationAnalysis(string _XgGameText, CheckerPlayAnalysis _CheckerPlayAnalysisJson, int _StartIndex, out bool _IsNoMore, ref bool _IsAnyRollout)
+        {
+            _IsNoMore = false;
+
+            // Move Number
+            int variationNumber = _CheckerPlayAnalysisJson.VariationList.Count + 1;
+            string variationNumberToken = (variationNumber < 10 ? "> " : ">") + variationNumber.ToString() + ".<";
+            int variationNumberStartIndex = _XgGameText.IndexOf(variationNumberToken, _StartIndex);
+            if (variationNumberStartIndex == -1)
+            {
+                _IsNoMore = true;
+                return _StartIndex;
+            }
+            CheckerPlayVariationAnalysis variationAnalysis = new();
+
+            // Analysis Depth
+            variationNumberStartIndex += variationNumberToken.Length;
+            int analysisDepthStartIndex = _XgGameText.IndexOf("\">", variationNumberStartIndex);
+            Debug.Assert(analysisDepthStartIndex != -1, "analysisDepthStartIndex");
+            analysisDepthStartIndex += 2;
+            int analysisDepthEndIndex = _XgGameText.IndexOf('<', analysisDepthStartIndex);
+            Debug.Assert(analysisDepthEndIndex != -1, "analysisDepthEndIndex");
+            variationAnalysis.AnalysisDepth = _XgGameText.Substring(analysisDepthStartIndex, analysisDepthEndIndex - analysisDepthStartIndex);
+
+            // Rollout Details Index
+            int supEndIndex = analysisDepthEndIndex;
+            if (variationAnalysis.AnalysisDepth.Equals("Rollout"))
+            {
+                _IsAnyRollout = true;
+                const string supToken = "<sup>";
+                int supStartIndex = _XgGameText.IndexOf(supToken, analysisDepthEndIndex);
+                Debug.Assert(supStartIndex != -1, "supStartIndex");
+                supStartIndex += supToken.Length;
+                supEndIndex = _XgGameText.IndexOf("</sup>", supStartIndex);
+                string supTxt = _XgGameText.Substring(supStartIndex, supEndIndex - supStartIndex);
+                if (!int.TryParse(supTxt, out int supIndex))
+                    throw new InvalidOperationException($"Invalid Rollout Sup: {supTxt}");
+                variationAnalysis.RolloutListIndex = supIndex - 1;
+            }
+
+            // Actual Checker Play Index
+            const string actualCheckerPlayToken = "alt=\"played\"";
+            if (_XgGameText.IndexOf(actualCheckerPlayToken, variationNumberStartIndex, analysisDepthStartIndex - variationNumberStartIndex) != -1)
+                _CheckerPlayAnalysisJson.ActualCheckerPlayIndex = _CheckerPlayAnalysisJson.VariationList.Count;
+
+            // Checker Play Text
+            int checkerPlayStartIndex = _XgGameText.IndexOf("\">", supEndIndex);
+            Debug.Assert(analysisDepthStartIndex != -1, "checkerPlayStartIndex");
+            checkerPlayStartIndex += 2;
+            int checkerPlayEndIndex = _XgGameText.IndexOf('<', checkerPlayStartIndex);
+            Debug.Assert(checkerPlayEndIndex != -1, "checkerPlayEndIndex");
+            variationAnalysis.MoveTxt = _XgGameText.Substring(checkerPlayStartIndex, checkerPlayEndIndex - checkerPlayStartIndex);
+
+            // Equity
+            const string equityToken = ">eq: ";
+            int equityStartIndex = _XgGameText.IndexOf("\">", checkerPlayEndIndex);
+            Debug.Assert(equityStartIndex != -1, "equityStartIndex");
+            equityStartIndex += equityToken.Length;
+            int equityEndIndex = _XgGameText.IndexOf('<', equityStartIndex);
+            Debug.Assert(equityEndIndex != -1, "equityEndIndex");
+            int altEndIndex = _XgGameText.IndexOf(" (", equityStartIndex, equityEndIndex - equityStartIndex);
+            if (altEndIndex != -1)
+                equityEndIndex = altEndIndex;
+            string equityTxt = _XgGameText.Substring(equityStartIndex, equityEndIndex - equityStartIndex);
+            if (!float.TryParse(equityTxt, out float equity))
+                throw new InvalidOperationException($"Invalid Move Equity: {equityTxt}");
+            variationAnalysis.CheckerPlayEquity = equity;
+
+            _CheckerPlayAnalysisJson.VariationList.Add(variationAnalysis);
+
+            return equityEndIndex;
+        }
+        private static int ExtractCheckerPlayRolloutDetails(string _XgGameText, CheckerPlayAnalysis _CheckerPlayAnalysisJson, int _StartIndex, out bool _IsNoMore)
+        {
+            _IsNoMore = false;
+
+            // Sup Number
+            int soughtSup = _CheckerPlayAnalysisJson.RolloutDetailsList.Count + 1;
+            string supToken = "<sup>" + soughtSup.ToString() + "</sup>";
+            int supStartIndex = _XgGameText.IndexOf(supToken, _StartIndex);
+            if (supStartIndex == -1)
+            {
+                _IsNoMore = true;
+                return _StartIndex;
+            }
+            supStartIndex += supToken.Length;
+            RolloutDetails rolloutDetails = new();
+
+            // trials
+            const string gamesRolledToken = " Games rolled";
+            int gamesRolledEndIndex = _XgGameText.IndexOf(gamesRolledToken, supStartIndex);
+            if (gamesRolledEndIndex == -1)
+            {
+                const string TableEndToken = "</table>";
+                const string XgRollerToken = "Analyzed in XG Roller++";
+                int tableEndIndex = _XgGameText.IndexOf(TableEndToken, supStartIndex);
+                Debug.Assert(tableEndIndex != -1, TableEndToken);
+                int xgRollerIndex = _XgGameText.IndexOf(XgRollerToken, supStartIndex, tableEndIndex - supStartIndex);
+                Debug.Assert(xgRollerIndex != -1, XgRollerToken);
+                rolloutDetails.Trials = 0;
+                rolloutDetails.DiceSeed = null;
+                rolloutDetails.AnalysisDepth = XgRollerToken;
+                _CheckerPlayAnalysisJson.RolloutDetailsList.Add(rolloutDetails);
+                return xgRollerIndex+ XgRollerToken.Length;
+            }
+            int gamesRolledStartIndex = _XgGameText.LastIndexOf('>', gamesRolledEndIndex) + 1;
+            string trialsTxt = _XgGameText.Substring(gamesRolledStartIndex, gamesRolledEndIndex - gamesRolledStartIndex);
+            if (!int.TryParse(trialsTxt, out int rolloutTrials))
+                throw new InvalidOperationException($"Invalid trials: {trialsTxt}");
+
+            // Dice Seed
+            long? diceSeed = null;
+            const string diceSeedDepthToken = "Dice Seed: ";
+            int diceSeedEndIndex = gamesRolledEndIndex;
+            int diceSeedStartIndex = _XgGameText.IndexOf(diceSeedDepthToken, diceSeedEndIndex);
+            if (diceSeedStartIndex == -1)
+            {
+                diceSeedStartIndex = gamesRolledEndIndex;
+            }
+            else
+            {
+                diceSeedStartIndex += diceSeedDepthToken.Length;
+                diceSeedEndIndex = _XgGameText.IndexOf('<', diceSeedStartIndex);
+                Debug.Assert(diceSeedEndIndex != -1, diceSeedDepthToken);
+                string diceSeedTxt = _XgGameText.Substring(diceSeedStartIndex, diceSeedEndIndex - diceSeedStartIndex);
+                if (!long.TryParse(diceSeedTxt, out long seed))
+                    throw new InvalidOperationException($"Invalid dice seed: {diceSeedTxt}");
+                diceSeed = seed;
+            }
+
+            // Analysis depth
+            const string analysisDepthToken = "Moves and cube decisions: ";
+            int analysisDepthStartIndex = _XgGameText.IndexOf(analysisDepthToken, diceSeedEndIndex);
+            if (analysisDepthStartIndex == -1)
+            {
+                const string cubeAnalysisDepthToken = "cube decisions: ";
+                analysisDepthStartIndex = _XgGameText.IndexOf(cubeAnalysisDepthToken, diceSeedStartIndex);
+                Debug.Assert(analysisDepthStartIndex != -1, analysisDepthToken);
+                analysisDepthStartIndex += cubeAnalysisDepthToken.Length;
+            }
+            else
+            {
+                analysisDepthStartIndex += analysisDepthToken.Length;
+            }
+            int analysisDepthEndIndex = _XgGameText.IndexOf('<', analysisDepthStartIndex);
+            Debug.Assert(analysisDepthEndIndex != -1, analysisDepthToken);
+            string analysisDepth = _XgGameText.Substring(analysisDepthStartIndex, analysisDepthEndIndex - analysisDepthStartIndex);
+
+            rolloutDetails.Trials = rolloutTrials;
+            rolloutDetails.DiceSeed = diceSeed;
+            rolloutDetails.AnalysisDepth = analysisDepth;
+            _CheckerPlayAnalysisJson.RolloutDetailsList.Add(rolloutDetails);
+
+            return analysisDepthEndIndex;
+        }
+
+        #endregion Checker Play Decision helper methods
     }
 }

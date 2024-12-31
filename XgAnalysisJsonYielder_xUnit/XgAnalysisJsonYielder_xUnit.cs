@@ -33,6 +33,8 @@ namespace XgAnalysisJsonYielderNamespace
             foreach (MatchAnalysis xgMatchAnalysis in XgAnalysisJsonYielder.XgAnalysisMatchJsonYielder(XgHtmlAnalysisDirectory))
             {
                 ++matchCount;
+                xgMatchAnalysis.WriteToJsonFile(@"C:\Users\halhe\Documents\eXtremeGammon\Exports Web\JSON");
+                MatchAnalysis matchAnalysisFromFile = new MatchAnalysis($@"C:\Users\halhe\Documents\eXtremeGammon\Exports Web\JSON\{xgMatchAnalysis.MatchFileName}.json");
                 if (MaxMatchCt > 0 && matchCount >= MaxMatchCt)
                     break;
             }

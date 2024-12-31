@@ -1,4 +1,6 @@
-﻿namespace XgAnalysisJsonNamespace
+﻿using System.Text.Json;
+
+namespace XgAnalysisJsonNamespace
 {
     public class MatchAnalysis
     {
@@ -7,6 +9,31 @@
         public string TopPlayerName { get; set; } = string.Empty;
         public string MatchFileName { get; set; } = string.Empty;
         public List<GameAnalysis> GameAnalysisList { get; set; } = [];
+        public MatchAnalysis() { }
+
+        public MatchAnalysis(string jsonFilePath)
+        {
+            string json = File.ReadAllText(jsonFilePath);
+            MatchAnalysis? matchAnalysis = JsonSerializer.Deserialize<MatchAnalysis>(json);
+            if (matchAnalysis != null)
+            {
+                MatchLength = matchAnalysis.MatchLength;
+                BottomPlayerName = matchAnalysis.BottomPlayerName;
+                TopPlayerName = matchAnalysis.TopPlayerName;
+                MatchFileName = matchAnalysis.MatchFileName;
+                GameAnalysisList = matchAnalysis.GameAnalysisList;
+            }
+            else
+            {
+                throw new InvalidOperationException("Failed to deserialize JSON file.");
+            }
+        }
+        public void WriteToJsonFile(string directoryPath)
+        {
+            string json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
+            string outputFilePath = Path.Combine(directoryPath, $"{MatchFileName}.json");
+            File.WriteAllText(outputFilePath, json);
+        }
     }
     public class GameAnalysis
     {
@@ -35,13 +62,16 @@
     {
         public string XgidTxt { get; set; } = string.Empty;
         public int MoveNumber { get; set; }
+        public int ActualCheckerPlayIndex { get; set; } = -1;
         public List<CheckerPlayVariationAnalysis> VariationList { get; set; } = [];
+        public List<RolloutDetails> RolloutDetailsList { get; set; } = [];
     }
     public class CheckerPlayVariationAnalysis
     {
         public string MoveTxt { get; set; } = string.Empty;
         public string AnalysisDepth { get; set; } = string.Empty;
         public float CheckerPlayEquity { get; set; }
+        public int RolloutListIndex { get; set; } = -1;
     }
     public class RolloutDetails
     {
