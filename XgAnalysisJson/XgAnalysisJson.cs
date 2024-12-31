@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using System.Text.Encodings.Web;
+using System.Text.Json;
 
 namespace XgAnalysisJsonNamespace
 {
@@ -30,9 +31,35 @@ namespace XgAnalysisJsonNamespace
         }
         public void WriteToJsonFile(string directoryPath)
         {
-            string json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
+            var options = new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+            };
+            string json = JsonSerializer.Serialize(this, options);
             string outputFilePath = Path.Combine(directoryPath, $"{MatchFileName}.json");
             File.WriteAllText(outputFilePath, json);
+        }
+        public override bool Equals(object? obj)
+        {
+            return Equals(obj as MatchAnalysis);
+        }
+        public bool Equals(MatchAnalysis? other)
+        {
+            if (other == null)
+                return false;
+            if (!(MatchLength == other.MatchLength &&
+                   BottomPlayerName == other.BottomPlayerName &&
+                   TopPlayerName == other.TopPlayerName &&
+                   MatchFileName == other.MatchFileName))
+                return false;
+            if (GameAnalysisList.SequenceEqual(other.GameAnalysisList))
+                return false;
+            return true;
+        }
+        public override int GetHashCode()
+        {
+            return HashCode.Combine(MatchLength, BottomPlayerName, TopPlayerName, MatchFileName, GameAnalysisList);
         }
     }
     public class GameAnalysis

@@ -35,6 +35,7 @@ namespace XgAnalysisJsonYielderNamespace
                 ++matchCount;
                 xgMatchAnalysis.WriteToJsonFile(@"C:\Users\halhe\Documents\eXtremeGammon\Exports Web\JSON");
                 MatchAnalysis matchAnalysisFromFile = new MatchAnalysis($@"C:\Users\halhe\Documents\eXtremeGammon\Exports Web\JSON\{xgMatchAnalysis.MatchFileName}.json");
+                Debug.Assert(xgMatchAnalysis.Equals(matchAnalysisFromFile));
                 if (MaxMatchCt > 0 && matchCount >= MaxMatchCt)
                     break;
             }
