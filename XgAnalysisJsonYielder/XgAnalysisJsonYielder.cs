@@ -9,7 +9,7 @@ namespace XgAnalysisJsonYielderNamespace
     public class XgAnalysisJsonYielder
     {
         #region Main Loop
-        public static IEnumerable<MatchAnalysis> XgAnalysisMatchJsonYielder(string _XgHtmlAnalysisDir)
+        public static IEnumerable<MatchAnalysis> XgAnalysisMatchJsonYielder(string _XgHtmlAnalysisDir, string _JsonOutputDir = "")
         {
             string[] matchDirectories = Directory.GetDirectories(_XgHtmlAnalysisDir);
             if (matchDirectories.Length == 0)
@@ -17,12 +17,24 @@ namespace XgAnalysisJsonYielderNamespace
                 throw new InvalidOperationException("No directories found in the specified path.");
             }
 
-            var matchAnalysisTasks = matchDirectories
+            string[] jsonFiles = _JsonOutputDir != ""
+                ? Directory.GetFiles(_JsonOutputDir, "*.json").Select(file => Path.GetFileNameWithoutExtension(file)!).ToArray()
+                : Array.Empty<string>();
+
+            string[] matchDirectoriesPruned = matchDirectories
+               .Where(matchDirectory =>
+               {
+                   string matchFileName = new DirectoryInfo(matchDirectory).Name;
+                   return !jsonFiles.Contains(matchFileName) && !matchDirectory.EndsWith(@"\images", StringComparison.OrdinalIgnoreCase);
+               })
+               .ToArray();
+
+            ParallelQuery<MatchAnalysis> matchAnalysisTasks = matchDirectoriesPruned
                 .AsParallel()
-                .Where(matchDirectory => !matchDirectory.EndsWith(@"\images", StringComparison.OrdinalIgnoreCase))
-                .SelectMany(matchDirectory =>
+                .Where(pqMatchDirectory => !pqMatchDirectory.EndsWith(@"\images", StringComparison.OrdinalIgnoreCase))
+                .SelectMany(selMatchDirectory =>
                 {
-                    return ProcessMatchDirectory(matchDirectory);
+                    return ProcessMatchDirectory(selMatchDirectory);
                 });
 
             foreach (MatchAnalysis matchAnalysis in matchAnalysisTasks)
@@ -162,7 +174,7 @@ namespace XgAnalysisJsonYielderNamespace
         }
         private static int ValidateMatchLength(string _XgGameText, MatchAnalysis _XgMatchJson, int _StartIndex)
         {
-            const string matchLengthToken = " point match, ";
+            const string matchLengthToken = " point match";
             int matchLengthSeparatorIndex = _XgGameText.IndexOf(matchLengthToken, _StartIndex, StringComparison.Ordinal);
             if (matchLengthSeparatorIndex == -1)
             {
@@ -189,10 +201,21 @@ namespace XgAnalysisJsonYielderNamespace
             const string scoreStartToken = ", Score is";
             string bottomPlayerStartToken = "/> " + _XgMatchJson.BottomPlayerName + ": ";
             const char bottomPlayerEndChar = ',';
-            int scoreStartIndex = _XgGameText.IndexOf(scoreStartToken, _StartIndex, StringComparison.Ordinal) + scoreStartToken.Length;
+            int scoreStartIndex = _XgGameText.IndexOf(scoreStartToken, _StartIndex, StringComparison.Ordinal);
+            if (scoreStartIndex == -1)
+            {
+                string hh = _XgGameText.Substring(_StartIndex);
+                Debug.Assert(true);
+            }
+            Debug.Assert(scoreStartIndex != -1, scoreStartToken);
+            scoreStartIndex += scoreStartToken.Length;
 
             // Bottom player needs
-            int bottomPlayerStartIndex = _XgGameText.IndexOf(bottomPlayerStartToken, scoreStartIndex, StringComparison.Ordinal) + bottomPlayerStartToken.Length;
+            int bottomPlayerStartIndex = _XgGameText.IndexOf(bottomPlayerStartToken, scoreStartIndex, StringComparison.Ordinal);
+            if (bottomPlayerStartIndex == -1)
+                Debug.Assert(true);
+            Debug.Assert(bottomPlayerStartIndex != -1);
+            bottomPlayerStartIndex += bottomPlayerStartToken.Length;
             int bottomPlayerEndIndex = _XgGameText.IndexOf(bottomPlayerEndChar, bottomPlayerStartIndex) + bottomPlayerStartToken.Length;
             string bottomPlayerScoreText = _XgGameText.Substring(bottomPlayerStartIndex, bottomPlayerEndIndex - bottomPlayerStartIndex - bottomPlayerStartToken.Length);
             if (!int.TryParse(bottomPlayerScoreText, out int bottomPlayerScore))
@@ -262,13 +285,16 @@ namespace XgAnalysisJsonYielderNamespace
             cubeAnalysis.MoveNumber = _MoveNumber;
             cubeAnalysis.XgidTxt = _Xgid.XgidText;
             int analysisDepthEndIndex = ExtractAnalysisDepth(_XgGameText, cubeAnalysis, cubeAnalysis.XgidTxt.Length);
-            int noDblEndIndex = ExtractNoDoubleEquity(_XgGameText, cubeAnalysis, analysisDepthEndIndex);
-            int dblTakeEndIndex = ExtractDoubleTakeEquity(_XgGameText, cubeAnalysis, noDblEndIndex);
-            int endIndex = ExtractOccuredCubeAction(_XgGameText, cubeAnalysis, noDblEndIndex, dblTakeEndIndex, analysisDepthEndIndex);
-            endIndex = ExtractWrongPassThreshold(_XgGameText, cubeAnalysis, dblTakeEndIndex);
-            if (cubeAnalysis.AnalysisDepth.Equals("Rollout"))
-                endIndex = ExtractRolloutDetails(_XgGameText, cubeAnalysis, endIndex);
-            _XgGameJson.CubeAnalysisList.Add(cubeAnalysis);
+            int noDblEndIndex = ExtractNoDoubleEquity(_XgGameText, cubeAnalysis, analysisDepthEndIndex, out bool isValid);
+            if (isValid)
+            {
+                int dblTakeEndIndex = ExtractDoubleTakeEquity(_XgGameText, cubeAnalysis, noDblEndIndex);
+                int endIndex = ExtractOccuredCubeAction(_XgGameText, cubeAnalysis, noDblEndIndex, dblTakeEndIndex, analysisDepthEndIndex);
+                endIndex = ExtractWrongPassThreshold(_XgGameText, cubeAnalysis, dblTakeEndIndex);
+                if (cubeAnalysis.AnalysisDepth.Equals("Rollout"))
+                    endIndex = ExtractRolloutDetails(_XgGameText, cubeAnalysis, endIndex);
+                _XgGameJson.CubeAnalysisList.Add(cubeAnalysis);
+            }
         }
         private static int ExtractAnalysisDepth(string _XgGameText, CubeAnalysis _CubeAnalysis, int _StartIndex)
         {
@@ -281,14 +307,28 @@ namespace XgAnalysisJsonYielderNamespace
             _CubeAnalysis.AnalysisDepth = _XgGameText.Substring(analysisDepthStartIndex, analysisDepthEndIndex - analysisDepthStartIndex);
             return analysisDepthEndIndex + analysisDepthEndToken.Length;
         }
-        private static int ExtractNoDoubleEquity(string _XgGameText, CubeAnalysis _CubeAnalysis, int _StartIndex)
+        private static int ExtractNoDoubleEquity(string _XgGameText, CubeAnalysis _CubeAnalysis, int _StartIndex, out bool _IsValidCubeAnalysis)
         {
+            _IsValidCubeAnalysis = true;
             const string noDoubleEquityStartToken = "No double:</td><td>";
             const string noRedoubleEquityStartToken = "No redouble:</td><td>";
             int noDoubleEquityStartIndex = _XgGameText.IndexOf(noDoubleEquityStartToken, _StartIndex);
             if (noDoubleEquityStartIndex == -1)
             {
                 noDoubleEquityStartIndex = _XgGameText.IndexOf(noRedoubleEquityStartToken, _StartIndex);
+                if (noDoubleEquityStartIndex == -1)
+                {
+                    const string xgIdToken = ">XGID=";
+                    int xgidStartIndex = _XgGameText.IndexOf(xgIdToken, _StartIndex);
+                    if (xgidStartIndex == -1)
+                        xgidStartIndex = _XgGameText.Length;
+                    const string resignsToken = "> Resigns ";
+                    if (_XgGameText.IndexOf(resignsToken, _StartIndex, xgidStartIndex - _StartIndex) == -1)
+                    {
+                        _IsValidCubeAnalysis = false;
+                        return _StartIndex;
+                    }
+                }
                 Debug.Assert(noDoubleEquityStartIndex != -1, "NoDoubleEquity error");
                 noDoubleEquityStartIndex += noRedoubleEquityStartToken.Length;
             }
@@ -313,13 +353,22 @@ namespace XgAnalysisJsonYielderNamespace
         private static int ExtractDoubleTakeEquity(string _XgGameText, CubeAnalysis _CubeAnalysis, int _StartIndex)
         {
             const string doubleTakeEquityStartToken = "Double/Take:</td><td>";
-            const string noRedoubleEquityStartToken = "Redouble/Take:</td><td>";
+            const string redoubleEquityStartToken = "Redouble/Take:</td><td>";
+            const string doubleBeaverEquityStartToken = "Double/Beaver:</td><td>";
             int doubleTakeEquityStartIndex = _XgGameText.IndexOf(doubleTakeEquityStartToken, _StartIndex);
             if (doubleTakeEquityStartIndex == -1)
             {
-                doubleTakeEquityStartIndex = _XgGameText.IndexOf(noRedoubleEquityStartToken, _StartIndex);
-                Debug.Assert(doubleTakeEquityStartIndex != -1, "doubleTakeEquity error");
-                doubleTakeEquityStartIndex += noRedoubleEquityStartToken.Length;
+                doubleTakeEquityStartIndex = _XgGameText.IndexOf(redoubleEquityStartToken, _StartIndex);
+                if (doubleTakeEquityStartIndex == -1)
+                {
+                    doubleTakeEquityStartIndex = _XgGameText.IndexOf(doubleBeaverEquityStartToken, _StartIndex);
+                    if (doubleTakeEquityStartIndex == -1)
+                        Debug.Assert(true);
+                    Debug.Assert(doubleTakeEquityStartIndex != -1, "doubleTakeEquity error");
+                    doubleTakeEquityStartIndex += doubleBeaverEquityStartToken.Length;
+                }
+                else
+                    doubleTakeEquityStartIndex += redoubleEquityStartToken.Length;
             }
             else
                 doubleTakeEquityStartIndex += doubleTakeEquityStartToken.Length;
@@ -382,15 +431,25 @@ namespace XgAnalysisJsonYielderNamespace
             int playedIndex = _XgGameText.IndexOf(playedToken, _StartIndex);
             if (playedIndex == -1)
             {
-                if (_XgGameText.IndexOf(">Resigns the match<", _StartIndex) == -1
-                    && _XgGameText.IndexOf(">Resigns a Single Game ", _StartIndex) == -1)
-                {
-                    throw new InvalidOperationException($"Cube action played");
-                }
-                else
+                const string xgIdToken = ">XGID=";
+                int xgidIndex = _XgGameText.IndexOf(xgIdToken, _StartIndex);
+                if (xgidIndex == -1)
+                    xgidIndex = _XgGameText.Length;
+                bool isOk = false;
+                if (_XgGameText.IndexOf(">Resigns the match<", _StartIndex, xgidIndex - _StartIndex) != -1)
+                    isOk = true;
+                if (_XgGameText.IndexOf(">Resigns a Single Game ", _StartIndex, xgidIndex - _StartIndex) != -1)
+                    isOk = true;
+                if (_XgGameText.IndexOf(">Game Summary:", _StartIndex, xgidIndex - _StartIndex) != -1)
+                    isOk = true;
+                if (isOk)
                 {
                     _CubeAnalysis.DidPlayerDouble = false;
                     _CubeAnalysis.DidPlayerTake = false;
+                }
+                else
+                {
+                    throw new InvalidOperationException($"Cube action played");
                 }
                 return _StartIndex;
             }
@@ -649,7 +708,7 @@ namespace XgAnalysisJsonYielderNamespace
                 rolloutDetails.DiceSeed = null;
                 rolloutDetails.AnalysisDepth = XgRollerToken;
                 _CheckerPlayAnalysisJson.RolloutDetailsList.Add(rolloutDetails);
-                return xgRollerIndex+ XgRollerToken.Length;
+                return xgRollerIndex + XgRollerToken.Length;
             }
             int gamesRolledStartIndex = _XgGameText.LastIndexOf('>', gamesRolledEndIndex) + 1;
             string trialsTxt = _XgGameText.Substring(gamesRolledStartIndex, gamesRolledEndIndex - gamesRolledStartIndex);
